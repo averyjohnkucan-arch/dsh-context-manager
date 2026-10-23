@@ -2,7 +2,11 @@
 
 Adaptive output limits, reserved summarization space, and automatic continuation for DeepSeek Harness **0.2.1-rc.2**. All behavior lives in this Cordis plugin; no harness or inference-engine files are patched.
 
-Install this folder or its npm tarball as a DSH bundle. The bundle disables `compaction-basic` and supplies a replacement using its public engine API and durable compaction transactions. Removing the bundle restores the standard engine. Disable the entire bundle rather than only its host entry, so the bundle's override is removed too.
+Install this folder or its npm tarball as a DSH bundle. The bundle disables the host `compaction-basic` and supplies a replacement using its public engine API and durable compaction transactions. DSH Web also mounts isolated native compactors inside agent presets. Version 0.1.1 uses Cordis's `internal/config` hook and fiber lifecycle API to disable their automatic policies, including already-mounted revisions and future presets. Their explicit `/compact` command remains native. No preset files, DSH code, or engine methods are patched.
+
+Removing the bundle restores the standard engine. Disable the entire bundle rather than only its host entry, so the bundle's override is removed too. Disabling also restores native preset policies and removes matching adaptive output allowances from live request headers before those policies resume. Existing chat summaries are not undone.
+
+The owner status endpoint reports `integration.managedPresetCompactors` and `integration.conflictingAutomaticCompactors`; the latter must be zero. The original host-only integration left preset compactors running: they subtracted the adaptive output allowance again and compacted prematurely at roughly 50K tokens. Regression tests reproduce that bug and verify the corrected integration across all four shipped preset types.
 
 ## Settings
 
@@ -47,4 +51,4 @@ npm run check
 npm pack
 ```
 
-The regression suite runs the real DSH agent loop with a deterministic in-memory adapter. It covers dynamic budgets, late context injection, switching model sizes, safe summary failure, cancellation, tool use after continuation, truncated tool calls, repeated output, settings persistence, and the continuation notice. No GPU is needed. Long-answer capacity is tested with synthetic responses; this is not a benchmark of a live 200K-token generation.
+The regression suite runs the real DSH agent loop with a deterministic in-memory adapter. Preset integration tests use DSH's actual registry, loader, and shipped compaction isolation groups. They verify no compaction through 200K tokens in a 262,144-token window, compaction near the configured threshold, future preset revisions, and restoring defaults on disable. Other tests cover dynamic budgets, late context injection, switching model sizes, safe summary failure, cancellation, tool use after continuation, truncated tool calls, repeated output, settings persistence, and the continuation notice. No GPU is needed. Long-answer capacity is tested with synthetic responses; this is not a benchmark of a live 200K-token generation.

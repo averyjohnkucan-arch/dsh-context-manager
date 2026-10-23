@@ -5,6 +5,7 @@ import {join} from 'node:path';
 import {homedir} from 'node:os';
 import {ContextEngine} from './lib/engine.js';
 import {settings} from './lib/policy.js';
+import {coordinateCompactors} from './lib/integration.js';
 
 export const inject = ['llm', 'tokenMeter', 'sessions', 'webServer', 'systemPrompt'];
 export const Config = z.object({dataDir: z.string()});
@@ -14,10 +15,17 @@ export async function apply(ctx, config = {}) {
   const path = join(root, 'settings.json');
   let saved = {};
   try {saved = JSON.parse(await readFile(path, 'utf8'));} catch (error) {if (error.code !== 'ENOENT') throw error;}
+  // Settle every existing preset's native compactor before publishing adaptive
+  // allowances. The config hook also covers future presets and child agents.
+  const integration = await coordinateCompactors(ctx);
   const engine = new ContextEngine(ctx, settings(saved)), token = randomBytes(32).toString('hex');
+  ctx.effect(() => async () => {
+    try { await engine.restoreOutputDefaults(); }
+    finally { await integration.dispose(); }
+  });
   let writes = Promise.resolve();
   ctx.on('webserver/index-inject', table => table.push({kind: 'global', name: '__DSH_CONTEXT_MANAGER__', value: {path: '/plugins/dsh-context-manager/action', token}}));
-  const status = () => ({settings: engine.preferences, recent: [...engine.recent.entries()].map(([sessionId, value]) => ({sessionId, ...value}))});
+  const status = () => ({settings: engine.preferences, integration: integration.status(), recent: [...engine.recent.entries()].map(([sessionId, value]) => ({sessionId, ...value}))});
   ctx.effect(() => ctx.webServer.register({kind: 'exact', path: '/plugins/dsh-context-manager/action', handler: async (req, res) => {
     res.setHeader('Content-Type', 'application/json'); res.setHeader('Cache-Control', 'no-store');
     const supplied = Buffer.from(String(req.headers.authorization || '').replace(/^Bearer /, '')), expected = Buffer.from(token);

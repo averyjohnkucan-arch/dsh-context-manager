@@ -1,6 +1,6 @@
 {
   "name": "dsh-context-manager",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "Adaptive output budgets, safe compaction and automatic continuation for DSH.",
   "license": "MIT",
@@ -20,7 +20,7 @@
   ],
   "scripts": {
     "test": "node --test test/*.test.js",
-    "check": "node --check index.js && node --check client.js && node --check lib/engine.js"
+    "check": "node --check index.js && node --check client.js && node --check lib/engine.js && node --check lib/integration.js"
   },
   "engines": {
     "node": ">=22.19",
@@ -54,6 +54,11 @@
     "@deepseek-ai/dsh-session": "0.2.1-rc.2",
     "@deepseek-ai/dsh-session-projection": "0.2.1-rc.2",
     "@deepseek-ai/dsh-token-meter": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-tools": "0.2.1-rc.2"
+    "@deepseek-ai/dsh-tools": "0.2.1-rc.2",
+    "@deepseek-ai/cordis-plugin-loader": "1.0.6",
+    "@deepseek-ai/cordis-plugin-include": "1.0.10",
+    "@deepseek-ai/dsh-agent-preset-registry": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-web-app": "0.2.1-rc.2",
+    "js-yaml": "^4.1.1"
   }
 }

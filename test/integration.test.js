@@ -11,6 +11,15 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt';
 import Tools from '@deepseek-ai/dsh-tools';
 import {ContextEngine} from '../lib/engine.js';
 import {settings} from '../lib/policy.js';
+import {coordinateCompactors} from '../lib/integration.js';
+import Loader, {Group} from '@deepseek-ai/cordis-plugin-loader';
+import Presets from '@deepseek-ai/dsh-agent-preset-registry';
+import {entryListSchema} from '@deepseek-ai/cordis-plugin-include';
+import {load} from 'js-yaml';
+import {readFile, mkdtemp, rm} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import * as ContextPlugin from '../index.js';
 
 function* response(text, reason = 'stop') {
   yield {type: 'block-start', index: 0, blockType: 'text'};
@@ -34,15 +43,39 @@ async function fixture(t, options = {}) {
     }
   }
   ctx.llm.registerAdapter(['ninfer', 'strata', 'cloud'], new Adapter());
-  const engine = new ContextEngine(ctx, settings(options.settings));
+  let registration, coordination;
+  async function registerPreset(id = options.preset) {
+    const file = import.meta.resolve(`@deepseek-ai/dsh-web-app/presets/${options.preset}.patch.yml`);
+    const config = load(await readFile(new URL(file), 'utf8'), {schema: entryListSchema})[0].insert[0].config;
+    const group = config.plugins.find(row => row.id === 'compaction');
+    // Use the real shipped isolation group and native backend. The command and
+    // result-pruner rows depend on unrelated services, so omit those here.
+    return ctx.agentPresets.register({...config, id, plugins: [{...group, config: group.config.filter(row => row.id === 'compaction-basic')}]});
+  }
+  if (options.preset) {
+    const loader = new Loader(ctx, {baseUrl: new URL('../', import.meta.url).href});
+    loader.builtins.group = Group;
+    new Presets(ctx, {default: options.preset, selectedDefault: {get: () => undefined}});
+    registration = await registerPreset();
+  }
+  if (options.coordinate) coordination = await coordinateCompactors(ctx);
+  let mounted, engine;
+  if (options.fullPlugin) {
+    const dataDir = await mkdtemp(join(tmpdir(), 'context-preset-test-'));
+    t.after(() => rm(dataDir, {recursive: true, force: true}));
+    ctx.provide('webServer', {getOrigin: () => 'http://localhost', register: () => () => {}});
+    mounted = ctx.plugin(ContextPlugin, {dataDir}); await mounted;
+    engine = ctx.compaction;
+  } else engine = new ContextEngine(ctx, settings(options.settings));
   new AgentLoop(ctx, {agents: [], maxParallelToolCalls: {get: () => 4}});
-  const handle = await ctx.agents.create({sessionId: 'test-context', agentOptions: {provider: options.provider || 'ninfer', model: 'fixture'}});
-  t.after(async () => {await handle.dispose(); await ctx.fiber.dispose();});
+  const handle = await ctx.agents.create({sessionId: 'test-context', agentOptions: {provider: options.provider || 'ninfer', model: 'fixture'},
+    ...(options.preset ? {setup: async agentCtx => {await ctx.agentPresets.mount(agentCtx, options.preset);}} : {})});
+  t.after(async () => {if (mounted) await mounted.dispose(); else await engine.restoreOutputDefaults(); await coordination?.dispose(); await handle.dispose(); await registration?.(); await ctx.fiber.dispose();});
   const agent = handle.agent;
   if (options.setup) options.setup({ctx, engine, agent});
   const send = async text => {agent.followup(createUserMessage({source: {kind: 'user'}, content: [{type: 'text', text}]})); await agent.whenIdle();};
   const events = () => Array.from({length: agent.session.seq}, (_, i) => agent.session.eventAt(i));
-  return {ctx, engine, agent, calls, send, errors, events};
+  return {ctx, engine, agent, calls, send, errors, events, coordination, registerPreset, mounted};
 }
 
 test('real agent loop records dynamic allowance and final request leaves summary room', async t => {
@@ -175,4 +208,83 @@ test('late injected context is re-budgeted before a provider call', async t => {
   await f.send('Hello'); assert.deepEqual(f.errors, []); assert.equal(f.calls.length, 1);
   assert.ok(f.calls[0].maxTokens < 24000);
   assert.ok(f.events().some(e => e.type === 'assistant/attempt'));
+});
+
+test('reproduces the old host-only integration: a preset compacts around 50K', async t => {
+  const f = await fixture(t, {window: 262144, preset: 'standard', generate: () => response('Short answer.')});
+  for (let i = 0; i < 12; i++) await f.send('x'.repeat(20000));
+  assert.ok(f.calls.some(call => call.purpose === 'compaction'), 'old integration must reproduce early compaction');
+});
+
+test('the exact formerly failing multi-turn workload never compacts with coordination', async t => {
+  const f = await fixture(t, {window: 262144, preset: 'standard', coordinate: true});
+  for (let i = 0; i < 12; i++) await f.send('x'.repeat(20000));
+  assert.deepEqual(f.errors, []);
+  assert.equal(f.calls.filter(call => call.purpose === 'compaction').length, 0);
+  assert.ok(f.ctx.tokenMeter.measure(f.agent.session).totalTokens > 60000);
+});
+
+for (const preset of ['standard', 'ptc', 'cordis', 'minimal']) {
+  test(`${preset} preset: no early compaction at 50K–200K; compacts near the configured limit`, async t => {
+    const f = await fixture(t, {window: 262144, preset, coordinate: true,
+      generate: () => response('Short checkpoint or answer.')});
+    assert.equal(f.ctx.agentPresets.serviceFor(f.agent, 'compaction').config.auto, false);
+    for (let i = 0; i < 4; i++) await f.send('x'.repeat(200000));
+    assert.deepEqual(f.errors, []);
+    assert.equal(f.calls.filter(call => call.purpose === 'compaction').length, 0);
+    assert.ok(f.ctx.tokenMeter.measure(f.agent.session).totalTokens > 200000);
+    await f.send('x'.repeat(140000));
+    assert.deepEqual(f.errors, []);
+    const summaries = f.calls.filter(call => call.purpose === 'compaction');
+    assert.equal(summaries.length, 1);
+    assert.equal(summaries[0].maxTokens, 16384);
+    assert.equal(summaries[0].reasoningEffort, 'off');
+    assert.equal(f.coordination.status().conflictingAutomaticCompactors, 0);
+  });
+}
+
+test('new preset revisions are coordinated and disabling restores native policy and output defaults', async t => {
+  const f = await fixture(t, {window: 262144, preset: 'standard', coordinate: true});
+  const disposeNew = await f.registerPreset('new-revision');
+  t.after(disposeNew);
+  assert.equal(f.coordination.status().managedPresetCompactors, 2);
+  assert.equal(f.coordination.status().conflictingAutomaticCompactors, 0);
+  await f.send('x'.repeat(200000));
+  assert.ok(f.agent.session.requestHeader().config.maxTokens > 100000);
+  await f.engine.restoreOutputDefaults();
+  assert.equal(f.agent.session.requestHeader().config.maxTokens, 1000);
+  assert.equal(f.agent.session.requestHeader().adapterDefaults.maxTokens, true);
+  await f.coordination.dispose();
+  assert.equal(f.ctx.agentPresets.serviceFor(f.agent, 'compaction').config.auto, true);
+});
+
+test('full plugin hot disable restores the native preset and persisted request header', async t => {
+  const f = await fixture(t, {window: 262144, preset: 'standard', fullPlugin: true});
+  await f.send('x'.repeat(200000)); await f.send('Continue');
+  assert.deepEqual(f.errors, []);
+  assert.equal(f.calls.filter(call => call.purpose === 'compaction').length, 0);
+  assert.equal(f.ctx.agentPresets.serviceFor(f.agent, 'compaction').config.auto, false);
+  await f.mounted.dispose();
+  assert.equal(f.ctx.agentPresets.serviceFor(f.agent, 'compaction').config.auto, true);
+  assert.equal(f.agent.session.requestHeader().config.maxTokens, 1000);
+  assert.equal(f.agent.session.requestHeader().adapterDefaults.maxTokens, true);
+  const before = f.calls.length;
+  await f.send('Back to native settings');
+  assert.deepEqual(f.errors, []);
+  assert.equal(f.calls.length, before + 1);
+  assert.equal(f.calls.at(-1).maxTokens, 1000);
+});
+
+test('subagents inherit the coordinated preset without early compaction', async t => {
+  const f = await fixture(t, {window: 262144, preset: 'standard', coordinate: true});
+  const child = await f.ctx.agents.create({sessionId: 'child-context', agentOptions: {provider: 'ninfer', model: 'fixture'},
+    setup: async childCtx => {f.ctx.agentPresets.composeFrom(childCtx, f.agent.ctx);}});
+  t.after(() => child.dispose());
+  assert.equal(f.ctx.agentPresets.serviceFor(child.agent, 'compaction').config.auto, false);
+  for (let i = 0; i < 12; i++) {
+    child.agent.followup(createUserMessage({source: {kind: 'user'}, content: [{type: 'text', text: 'x'.repeat(20000)}]}));
+    await child.agent.whenIdle();
+  }
+  assert.deepEqual(f.errors, []);
+  assert.equal(f.calls.filter(call => call.purpose === 'compaction').length, 0);
 });
