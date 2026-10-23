@@ -1,0 +1,6 @@
+- id: compaction-basic
+  disabled: true
+- insert:
+    - id: dsh-context-manager
+      name: dsh-context-manager
+      config: {}
