@@ -22,7 +22,7 @@ Open **Settings → Models → Context & output**. Settings are saved in `$DSH_H
 | Minimum space before compaction | 4,096 tokens |
 | Recent context retained verbatim | 32,768 tokens |
 
-For NInfer and Strata, the requested output allowance is:
+For NInfer, Strata and Dory, the requested output allowance is:
 
 ```
 context window − estimated prompt − summary budget − safety buffer

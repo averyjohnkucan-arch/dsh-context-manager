@@ -6,6 +6,7 @@ test('large local models spend remaining context, not their old output default',
   const info = {context: {contextWindow: 262144}, defaultMaxTokens: 32768};
   assert.equal(outputBudget(DEFAULTS, info, 20000, 'ninfer').maxTokens, 217568);
   assert.equal(outputBudget(DEFAULTS, info, 20000, 'strata').maxTokens, 217568);
+  assert.equal(outputBudget(DEFAULTS, info, 20000, 'dory').maxTokens, 217568);
   assert.equal(outputBudget(DEFAULTS, info, 20000, 'cloud').maxTokens, 32768);
 });
 test('small contexts scale reserves and never receive a cap above available space', () => {

@@ -39,7 +39,7 @@ window.__ModuleLoader__.load({id: 'dsh-context-manager', factory(require) {
       return h('section', {className: 'dsh-context-settings', style: {marginTop: 16, padding: 16, border: '1px solid var(--dsw-alias-settings-card-stroke)', borderRadius: 12, background: 'var(--dsw-alias-settings-card-fill)'}},
         h('style', null, '.dsh-context-settings{color:var(--dsw-alias-label-primary);font-size:14px}.dsh-context-settings h3{font-size:16px}.dsh-context-settings p,.dsh-context-settings small{color:var(--dsw-alias-label-secondary);line-height:1.5}.dsh-context-settings input[type=number],.dsh-context-settings button{font:inherit;color:inherit;background:var(--dsw-alias-bg-layer-1);border:1px solid var(--dsw-alias-border-l3);border-radius:8px;padding:8px}.dsh-context-settings :focus-visible{outline:2px solid #579bff;outline-offset:2px}.dsh-context-settings button{margin-top:16px;cursor:pointer}.dsh-context-settings button:disabled{opacity:.5}'),
         h('h3', null, 'Context & output'),
-        h('p', null, 'NInfer and Strata can use the remaining context for each response. A summary reserve and safety buffer stay free so the conversation can be compacted and continued.'),
+        h('p', null, 'NInfer, Strata and Dory can use the remaining context for each response. A summary reserve and safety buffer stay free so the conversation can be compacted and continued.'),
         draft && h(React.Fragment, null,
           h('div', {style: {display: 'flex', flexWrap: 'wrap', gap: 20, marginBottom: 16}}, check('auto', 'Compact automatically'), check('autoContinue', 'Continue automatically at the output limit')),
           h('div', {style: {display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 16}},
