@@ -52,3 +52,5 @@ npm pack
 ```
 
 The regression suite runs the real DSH agent loop with a deterministic in-memory adapter. Preset integration tests use DSH's actual registry, loader, and shipped compaction isolation groups. They verify no compaction through 200K tokens in a 262,144-token window, compaction near the configured threshold, future preset revisions, and restoring defaults on disable. Other tests cover dynamic budgets, late context injection, switching model sizes, safe summary failure, cancellation, tool use after continuation, truncated tool calls, repeated output, settings persistence, and the continuation notice. No GPU is needed. Long-answer capacity is tested with synthetic responses; this is not a benchmark of a live 200K-token generation.
+
+See [COMPATIBILITY.md](COMPATIBILITY.md) for supported DSH versions and upgrade checks.

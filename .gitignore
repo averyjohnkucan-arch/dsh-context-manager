@@ -1,3 +1,7 @@
 node_modules/
 *.tgz
 .runtime/
+
+# DSH compatibility workflow scratch data
+.compat-home/
+.compat-packed/
