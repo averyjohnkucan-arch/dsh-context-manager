@@ -1,6 +1,6 @@
 {
   "name": "dsh-context-manager",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "type": "module",
   "description": "Adaptive output budgets, safe compaction and automatic continuation for DSH.",
   "license": "MIT",
@@ -20,19 +20,20 @@
   ],
   "scripts": {
     "test": "node --test test/*.test.js",
-    "check": "node --check index.js && node --check client.js && node --check lib/engine.js && node --check lib/integration.js"
+    "check": "node --check index.js && node --check client.js && node --check lib/engine.js && node --check lib/integration.js",
+    "check:dsh": "node scripts/check-dsh-compatibility.mjs"
   },
   "engines": {
     "node": ">=22.19",
-    "dsh": "0.2.1-rc.2"
+    "dsh": ">=0.2.1-rc.2 <0.3.0-0"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "~4.0.5",
     "@deepseek-ai/schemastery": "~3.18.5",
-    "@deepseek-ai/dsh-compaction-basic": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-compaction": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-llm": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-system-prompt": "0.2.1-rc.2"
+    "@deepseek-ai/dsh-compaction-basic": ">=0.2.1-rc.2 <0.3.0-0",
+    "@deepseek-ai/dsh-compaction": ">=0.2.1-rc.2 <0.3.0-0",
+    "@deepseek-ai/dsh-llm": ">=0.2.1-rc.2 <0.3.0-0",
+    "@deepseek-ai/dsh-system-prompt": ">=0.2.1-rc.2 <0.3.0-0"
   },
   "dsh": {
     "bundle": {
