@@ -53,8 +53,12 @@ if (manifest.dsh.client) {
   function resolveClient(id) {
     try { hostRequire.resolve(id); return; } catch (error) {
       // Baseline browser modules are frozen into the shell, not npm modules.
+      // Minifiers leave valid identifier keys such as react unquoted.
+      const identifierKey = /^[A-Za-z_$][\w$]*$/.test(id)
+        ? new RegExp('(?:[,{])\\s*' + id.replace(/[$]/g, '\\$&') + '\\s*:') : undefined;
       if (!shellSources.includes(JSON.stringify(id) + ':') &&
-          !shellSources.includes("'" + id + "':")) throw error;
+          !shellSources.includes("'" + id + "':") &&
+          !identifierKey?.test(shellSources)) throw error;
     }
   }
   for (const id of [...manifest.dsh.client.inject || [], ...manifest.dsh.client.external || []]) resolveClient(id);
