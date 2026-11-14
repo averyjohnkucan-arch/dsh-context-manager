@@ -1,6 +1,6 @@
 {
   "name": "dsh-context-manager",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "Buffer-triggered compaction with capacity-based verbatim retention and message-free continuation.",
   "license": "MIT",
@@ -71,11 +71,6 @@
     "@deepseek-ai/dsh-agent-loop": "0.2.2-rc.1",
     "@deepseek-ai/dsh-session-projection": "0.2.2-rc.1",
     "@deepseek-ai/dsh-token-meter": "0.2.2-rc.1",
-    "@deepseek-ai/cordis-plugin-loader": "1.0.6",
-    "@deepseek-ai/cordis-plugin-include": "1.0.10",
-    "@deepseek-ai/dsh-agent-preset-registry": "0.2.2-rc.1",
-    "@deepseek-ai/dsh-web-app": "0.2.2-rc.1",
-    "js-yaml": "^4.1.1",
     "@deepseek-ai/dsh-tool-executor-native": "0.2.2-rc.1"
   }
 }
