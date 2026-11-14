@@ -8,7 +8,7 @@ import {Context} from '@deepseek-ai/cordis';
 import LlmRuntime from '@deepseek-ai/dsh-llm';
 import SessionStore from '@deepseek-ai/dsh-session';
 import Projection from '@deepseek-ai/dsh-session-projection';
-import TokenMeter from '@deepseek-ai/dsh-token-meter';
+import TokenMeter from '../token-meter.js';
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt';
 import {apply} from '../index.js';
 
@@ -34,9 +34,10 @@ test('owner settings endpoint authenticates, validates and persists changes', as
   const a = await boot(); t.after(() => a.ctx.fiber.dispose());
   assert.equal((await a.call('list', {}, {authorization: 'Bearer invalid'})).status, 401);
   assert.equal((await a.call('list', {}, {origin: 'http://untrusted.invalid'})).status, 403);
-  assert.equal((await a.call('configure', {outputCap: -2})).status, 400);
-  assert.equal((await a.call('configure', {outputCap: 4096})).status, 200);
-  assert.equal(JSON.parse(await readFile(join(root, 'settings.json'), 'utf8')).outputCap, 4096);
+  assert.equal((await a.call('configure', {outputBuffer: -2})).status, 400);
+  assert.equal((await a.call('configure', {outputBuffer: 4096})).status, 200);
+  assert.equal(JSON.parse(await readFile(join(root, 'settings.json'), 'utf8')).outputBuffer, 4096);
   const b = await boot(); t.after(() => b.ctx.fiber.dispose());
-  assert.equal((await b.call('list')).body.result.settings.outputCap, 4096);
+  assert.equal((await b.call('list')).body.result.settings.outputBuffer, 4096);
 });
+

@@ -1,6 +1,16 @@
 - id: compaction-basic
   disabled: true
+- id: agent-loop
+  disabled: true
+- id: token-meter
+  disabled: true
 - insert:
+    - id: context-token-meter
+      name: dsh-context-manager/token-meter
+    - id: context-agent-loop
+      name: dsh-context-manager/loop
+      config:
+        agents: []
     - id: dsh-context-manager
       name: dsh-context-manager
       config: {}

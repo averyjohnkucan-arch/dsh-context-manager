@@ -4,7 +4,7 @@ import {mkdir, readFile, writeFile, rename} from 'node:fs/promises';
 import {join} from 'node:path';
 import {homedir} from 'node:os';
 import {ContextEngine} from './lib/engine.js';
-import {settings} from './lib/policy.js';
+import {settings, migrate} from './lib/policy.js';
 import {coordinateCompactors} from './lib/integration.js';
 
 export const inject = ['llm', 'tokenMeter', 'sessions', 'webServer', 'systemPrompt'];
@@ -18,7 +18,13 @@ export async function apply(ctx, config = {}) {
   // Settle every existing preset's native compactor before publishing adaptive
   // allowances. The config hook also covers future presets and child agents.
   const integration = await coordinateCompactors(ctx);
-  const engine = new ContextEngine(ctx, settings(saved)), token = randomBytes(32).toString('hex');
+  const migrated = migrate(saved);
+  if (JSON.stringify(saved) !== JSON.stringify(migrated)) {
+    if (Object.keys(saved).length) await writeFile(join(root, 'settings-v1-backup.json'), JSON.stringify(saved, null, 2) + '\n', {mode: 0o600});
+    await writeFile(path + '.tmp', JSON.stringify(migrated, null, 2) + '\n', {mode: 0o600});
+    await rename(path + '.tmp', path);
+  }
+  const engine = new ContextEngine(ctx, migrated), token = randomBytes(32).toString('hex');
   ctx.effect(() => async () => {
     try { await engine.restoreOutputDefaults(); }
     finally { await integration.dispose(); }
@@ -49,3 +55,4 @@ export async function apply(ctx, config = {}) {
   }}));
   ctx.effect(() => () => writes.catch(() => {}));
 }
+

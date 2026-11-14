@@ -1,54 +1,51 @@
-# DSH Context Manager
+# DSH Context Manager 0.2
 
-Adaptive output limits, reserved summarization space, and automatic continuation for DeepSeek Harness **0.2.1-rc.2**. All behavior lives in this Cordis plugin; no harness or inference-engine files are patched.
+Buffer-triggered compaction and verbatim retention for **DSH 0.2.2-rc.1**.
 
-Install this folder or its npm tarball as a DSH bundle. The bundle disables the host `compaction-basic` and supplies a replacement using its public engine API and durable compaction transactions. DSH Web also mounts isolated native compactors inside agent presets. Version 0.1.1 uses Cordis's `internal/config` hook and fiber lifecycle API to disable their automatic policies, including already-mounted revisions and future presets. Their explicit `/compact` command remains native. No preset files, DSH code, or engine methods are patched.
+## Two settings
 
-Removing the bundle restores the standard engine. Disable the entire bundle rather than only its host entry, so the bundle's override is removed too. Disabling also restores native preset policies and removes matching adaptive output allowances from live request headers before those policies resume. Existing chat summaries are not undone.
+Open **Settings → Models → Context & output**.
 
-The owner status endpoint reports `integration.managedPresetCompactors` and `integration.conflictingAutomaticCompactors`; the latter must be zero. The original host-only integration left preset compactors running: they subtracted the adaptive output allowance again and compacted prematurely at roughly 50K tokens. Regression tests reproduce that bug and verify the corrected integration across all four shipped preset types.
+| Setting | Default | Meaning |
+|---|---:|---|
+| Output buffer | 32,768 tokens | Compact at a generation boundary when less than this much context remains. Not a response-length cap. |
+| Keep verbatim | 30% | Minimum recent tail, calculated from the model's total capacity. 30% of 1,000,000 keeps 300,000 tokens. |
 
-## Settings
+The response allowance is estimated remaining context minus one token. No fixed summary reserve is subtracted from ordinary output. Cloud providers retain their declared output ceilings. A physical context window and provider output ceiling still apply; this plugin cannot make a single request unlimited. DSH's meter is an estimate, so “minus one” is a request-budget rule, not a promise of exact tokenizer agreement.
 
-Open **Settings → Models → Context & output**. Settings are saved in `$DSH_HOME/dsh-context-manager/settings.json` (default `~/.dsh/dsh-context-manager/settings.json`) and apply on the next generation.
+The buffer is checked after naturally finished responses, at output-limit stops, and before new requests (including tool cycles, new inputs and model switches). Natural completion remains complete; after compaction the chat waits for its next input. Interrupted output can continue within the same turn without a synthetic user or “Continue” message, subject to the engine limitations below. User cancellation or pending input prevents automatic continuation.
 
-| Setting | Default |
-|---|---:|
-| Automatic compaction | On |
-| Automatic continuation | On |
-| Output cap | 0: use remaining space |
-| Summary budget | 16,384 tokens |
-| Safety buffer | 8,192 tokens |
-| Minimum space before compaction | 4,096 tokens |
-| Recent context retained verbatim | 32,768 tokens |
+## Verbatim tail and separate summary
 
-For NInfer, Strata and Dory, the requested output allowance is:
+The plugin keeps the recent tail outside the auxiliary summarization request. It sends the older selected region plus system instructions, relevant tool declarations, and a summarization instruction separately. The active context becomes system instructions, an older-history checkpoint, and the unchanged recent tail. Tool boundaries can increase the retained amount beyond the requested minimum.
 
-```
-context window − estimated prompt − summary budget − safety buffer
-```
+A single huge text-only response is handled by keeping its exact suffix. The original full response and stream remain in the archive, with no duplicate assistant message added to the transcript. An ignorable plugin record projects the suffix into model-visible history. Opaque reasoning blocks, tool calls and other structured blocks are not sliced. If there is no safe range that preserves the requested tail, the operation stops rather than silently discarding it.
 
-A 262,144-token model therefore has 237,568 tokens available for the prompt and response together. This is a maximum allowance, not a target response length. Other providers retain their advertised default output cap. A nonzero output-cap setting can further limit any route. The inference server may enforce a lower limit.
+Summary output must fit the separate request, be smaller than its source, and leave room for the retained tail, system overhead and output buffer in the final context. Truncated, empty or oversized summaries retry up to three times with a reduced allowance. A failed summary never replaces the original history. Native compaction records retain provenance. Original conversation events are not deleted.
 
-Reserves scale down for small context windows: summary ≤ one eighth, safety and minimum-output room ≤ one sixteenth, retained context ≤ one eighth. The plugin reads each model's declared context capacity; it does not increase that capacity. Estimates use DSH's token meter with a safety buffer, not an exact tokenizer for every model. The final admitted prompt is checked again before inference; internal budget retries rebuild and record the correct request rather than altering a frozen request.
+## Continuation support — read before installing
 
-## Compaction and continuation
+The replacement can continue a trailing assistant **text** prefix on NInfer without adding a user message when its server was launched with `--assistant-prefill` and the request's thinking mode is Off. It checks the saved profile and selected effort before resuming. It does not change your engine profiles or thinking defaults. The real DSH agent loop is tested with a deterministic adapter. GPU inference is not exercised by the regression suite.
 
-When the remaining space is low, the plugin summarizes older context and normally retains the recent tail. A single oversized finished response can also be summarized when necessary to free space. Tool-call/result boundaries remain balanced. Summarization uses a bounded output allowance and disables extended reasoning where the model exposes an off setting. A failed, empty, or truncated summary preserves the original history and stops safely.
+**Interrupted thinking is not universally supported.** The NInfer server's current assistant-prefill implementation explicitly rejects reasoning-bearing final assistant messages. On NInfer reasoning cutoffs, and on adapters without a verified prefix-continuation contract, the plugin preserves the partial response and pauses. It reports the reason in Context & output. It never inserts a hidden continuation prompt or claims the old hidden model state survived compaction.
 
-If a textual generation reaches its output limit, the plugin compacts if necessary and submits a durable automatic follow-up. It uses a new DSH turn because this DSH release keeps a token-limit turn-end reason across steps, which can otherwise prematurely end a later tool cycle. The original notice changes to “continued automatically below” only after that follow-up is admitted. User cancellation, pending user input, empty/repeated output, and truncated tool calls prevent automatic continuation. There is no artificial overall response-length cap; ordinary model completion still stops the response.
+Other adapters can implement `contextManagerCanContinue({model, content, reasoningEffort})` and return `true` once their message-free prefix behavior is implemented and verified. Unverified cloud, Strata and Dory routes are not silently treated as supported. Their ordinary compaction and retention work, but automatic cutoff continuation pauses.
 
-Changing the selected model to one with a smaller context triggers compaction against the new capacity, using the previous model to summarize the larger history. If the summary cannot make the pending request fit, processing stops without discarding the original content. A new user input too large to fit cannot be fixed by summarizing older turns.
+## Runtime integration
 
-Compaction invalidates the replaced prefix of any inference KV cache; the next request may need prefill. This plugin does not implement KV snapshot persistence or change model scheduling.
+The bundle disables native automatic compactors across existing and future agent presets. It supplies a plugin-owned agent loop with one narrowly scoped continuation extension and a token meter subclass that accounts for verbatim-tail projections. **No installed DSH or engine source files are edited.** The loop is vendored from DeepSeek's MIT-licensed 0.2.2-rc.1 release; its license and modification notes are in `vendor/`.
+
+This version pins DSH 0.2.2-rc.1 because it relies on that release's lifecycle and persistence contracts. Do not widen the range without testing the next host version.
+
+Install the npm tarball as a DSH bundle and restart DSH. Settings are stored in `$DSH_HOME/dsh-context-manager/settings.json` (normally `~/.dsh/dsh-context-manager/settings.json`). Old v1 settings are backed up to `settings-v1-backup.json` and replaced by the fresh two-setting defaults. Disable or remove the **whole bundle**, then restart, to restore native loop, meter and preset policies. Existing checkpoints remain. Tail projection records are ignorable without the plugin, so removing it restores the full original assistant message for that projected tail; that can increase context usage until the native compactor reduces it.
 
 ## Development
 
-```
-npm install
+```sh
+npm install --ignore-scripts
 npm test
 npm run check
 npm pack
 ```
 
-The regression suite runs the real DSH agent loop with a deterministic in-memory adapter. Preset integration tests use DSH's actual registry, loader, and shipped compaction isolation groups. They verify no compaction through 200K tokens in a 262,144-token window, compaction near the configured threshold, future preset revisions, and restoring defaults on disable. Other tests cover dynamic budgets, late context injection, switching model sizes, safe summary failure, cancellation, tool use after continuation, truncated tool calls, repeated output, settings persistence, and the continuation notice. No GPU is needed. Long-answer capacity is tested with synthetic responses; this is not a benchmark of a live 200K-token generation.
+Tests cover the real current DSH loop, full-capacity retention arithmetic, separate summary calls, text-tail preservation, no-message continuation, repeated-output stopping, summary failure retries, cancellation, provider limits and preset coordination. No credentials are required.

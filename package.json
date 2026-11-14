@@ -1,38 +1,59 @@
 {
   "name": "dsh-context-manager",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "type": "module",
-  "description": "Adaptive output budgets, safe compaction and automatic continuation for DSH.",
+  "description": "Buffer-triggered compaction with capacity-based verbatim retention and message-free continuation.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/averyjohnkucan-arch/dsh-context-manager.git"
+  },
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",
-    "./locale/*.json": "./locale/*.json"
+    "./loop": "./loop.js",
+    "./locale/*.json": "./locale/*.json",
+    "./token-meter": "./token-meter.js"
   },
   "files": [
     "index.js",
     "client.js",
+    "loop.js",
     "lib",
+    "vendor",
     "locale",
     "cordis.patch.yml",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "token-meter.js"
   ],
   "scripts": {
     "test": "node --test test/*.test.js",
-    "check": "node --check index.js && node --check client.js && node --check lib/engine.js && node --check lib/integration.js"
+    "check": "node scripts/check.mjs"
   },
   "engines": {
     "node": ">=22.19",
-    "dsh": "0.2.1-rc.2"
+    "dsh": "0.2.2-rc.1"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "~4.0.5",
-    "@deepseek-ai/schemastery": "~3.18.5",
-    "@deepseek-ai/dsh-compaction-basic": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-compaction": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-llm": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-system-prompt": "0.2.1-rc.2"
+    "@deepseek-ai/cordis": "~4.1.0",
+    "@deepseek-ai/dsh-agent": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-llm": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-scope": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-session": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-session-persistence": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-session-projection": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-system-prompt": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-tools": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-compaction-basic": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-compaction": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-token-meter": "0.2.2-rc.1"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-brand": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-util-values": "0.2.2-rc.1",
+    "@deepseek-ai/schemastery": "~3.19.0",
+    "zod": "4.4.3"
   },
   "dsh": {
     "bundle": {
@@ -42,23 +63,19 @@
       "platform": "web",
       "immediately": true,
       "inject": [
-        "@deepseek-ai/dsh-client-ui-settings-models",
-        "@deepseek-ai/dsh-client-ui-chat",
-        "@deepseek-ai/dsh-client-ui-conversation"
+        "@deepseek-ai/dsh-client-ui-settings-models"
       ]
     }
   },
   "devDependencies": {
-    "@deepseek-ai/dsh-agent": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-agent-loop": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-session": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-session-projection": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-token-meter": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-tools": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-agent-loop": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-session-projection": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-token-meter": "0.2.2-rc.1",
     "@deepseek-ai/cordis-plugin-loader": "1.0.6",
     "@deepseek-ai/cordis-plugin-include": "1.0.10",
-    "@deepseek-ai/dsh-agent-preset-registry": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-web-app": "0.2.1-rc.2",
-    "js-yaml": "^4.1.1"
+    "@deepseek-ai/dsh-agent-preset-registry": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-web-app": "0.2.2-rc.1",
+    "js-yaml": "^4.1.1",
+    "@deepseek-ai/dsh-tool-executor-native": "0.2.2-rc.1"
   }
 }

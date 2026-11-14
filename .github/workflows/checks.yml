@@ -11,10 +11,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - uses: pnpm/action-setup@v4
-        with:
-          version: '11.25.0'
-      - run: pnpm install --ignore-scripts --config.strictDepBuilds=false
-      - run: pnpm run check
-      - run: pnpm test
-      - run: pnpm pack --out /tmp/plugin-ci.tgz
+      - run: npm install --ignore-scripts
+      - run: npm test
+      - run: npm run check
+      - run: npm pack
