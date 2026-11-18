@@ -1,6 +1,8 @@
 # DSH Context Manager 0.2
 
-Buffer-triggered compaction and verbatim retention for **DSH 0.2.2-rc.1**.
+**RC4 installation trial.** Start DeepSeek Harness with `npx @deepseek-ai/dsh@0.2.2-rc.4 web` (Node.js 24.9 or newer). In **Plugins → Add plugin**, paste the full path to this RC4 trial’s `.tgz` file and enable the plugin.
+
+Buffer-triggered compaction and verbatim retention for **DSH 0.2.2-rc.4**.
 
 ## Two settings
 
@@ -33,9 +35,9 @@ Other adapters can implement `contextManagerCanContinue({model, content, reasoni
 
 ## Runtime integration
 
-The bundle disables native automatic compactors across existing and future agent presets. It supplies a plugin-owned agent loop with one narrowly scoped continuation extension and a token meter subclass that accounts for verbatim-tail projections. **No installed DSH or engine source files are edited.** The loop is vendored from DeepSeek's MIT-licensed 0.2.2-rc.1 release; its license and modification notes are in `vendor/`.
+The bundle disables native automatic compactors across existing and future agent presets. It supplies a plugin-owned agent loop with one narrowly scoped continuation extension and a token meter subclass that accounts for verbatim-tail projections. **No installed DSH or engine source files are edited.** The loop is vendored from DeepSeek's MIT-licensed 0.2.2-rc.4 release; its license and modification notes are in `vendor/`.
 
-This version pins DSH 0.2.2-rc.1 because it relies on that release's lifecycle and persistence contracts. Do not widen the range without testing the next host version.
+This version pins DSH 0.2.2-rc.4 because it relies on that release's lifecycle and persistence contracts. Do not widen the range without testing the next host version.
 
 Install the npm tarball as a DSH bundle and restart DSH. Settings are stored in `$DSH_HOME/dsh-context-manager/settings.json` (normally `~/.dsh/dsh-context-manager/settings.json`). Old v1 settings are backed up to `settings-v1-backup.json` and replaced by the fresh two-setting defaults. Disable or remove the **whole bundle**, then restart, to restore native loop, meter and preset policies. Existing checkpoints remain. Tail projection records are ignorable without the plugin, so removing it restores the full original assistant message for that projected tail; that can increase context usage until the native compactor reduces it.
 

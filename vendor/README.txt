@@ -1,5 +1,5 @@
 agent-loop.js is the bundled implementation of @deepseek-ai/dsh-agent-loop
-0.2.2-rc.1, under the adjacent upstream MIT LICENSE.
+0.2.2-rc.4, under the adjacent upstream MIT LICENSE.
 
 Modification: one context-manager/continue waterfall at the generation boundary
 allows another next-step request without adding an inbox/user message. It resets
