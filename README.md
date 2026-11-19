@@ -1,6 +1,6 @@
 # DSH Context Manager 0.2
 
-**RC4 installation trial.** Start DeepSeek Harness with `npx @deepseek-ai/dsh@0.2.2-rc.4 web` (Node.js 24.9 or newer). In **Plugins → Add plugin**, paste the full path to this RC4 trial’s `.tgz` file and enable the plugin.
+For DeepSeek Harness `0.2.2-rc.4` and Node.js 24.9 or newer, open **Plugins → Add plugin** and paste `https://github.com/averyjohnkucan-arch/dsh-context-manager`.
 
 Buffer-triggered compaction and verbatim retention for **DSH 0.2.2-rc.4**.
 
