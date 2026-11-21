@@ -23,7 +23,9 @@ The plugin keeps the recent tail outside the auxiliary summarization request. It
 
 A single huge text-only response is handled by keeping its exact suffix. The original full response and stream remain in the archive, with no duplicate assistant message added to the transcript. An ignorable plugin record projects the suffix into model-visible history. Opaque reasoning blocks, tool calls and other structured blocks are not sliced. If there is no safe range that preserves the requested tail, the operation stops rather than silently discarding it.
 
-Summary output must fit the separate request, be smaller than its source, and leave room for the retained tail, system overhead and output buffer in the final context. Truncated, empty or oversized summaries retry up to three times with a reduced allowance. A failed summary never replaces the original history. Native compaction records retain provenance. Original conversation events are not deleted.
+The output buffer is an early trigger. If a request still fits and a whole tool-call group prevents restoring the buffer, the plugin keeps that history and uses the remaining space for the next reply. A checkpoint that is the only eligible older message can also wait until more history becomes eligible. At a physical limit or provider-reported overflow, the plugin attempts a shrinking checkpoint and can use a smaller reserve when the retained tail requires it.
+
+Summary output must fit its separate request and leave room for checkpoint framing and the verbatim tail. Truncated, empty or oversized summaries get up to three attempts. Each retry asks for a shorter checkpoint and keeps the full safe generation allowance. If all attempts fail under ordinary pressure, the next request can proceed while it fits and the same eligible range is retried when its allowance improves. Provider errors and cancellations propagate. Native compaction records retain the original conversation and its provenance.
 
 ## Continuation support — read before installing
 

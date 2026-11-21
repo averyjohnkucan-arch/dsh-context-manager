@@ -13,6 +13,7 @@ import Loop from '../loop.js';
 import {ContextEngine} from '../lib/engine.js';
 import {coordinateCompactors} from '../lib/integration.js';
 import Basic from '@deepseek-ai/dsh-compaction-basic';
+import {compactCheckpointSource} from '@deepseek-ai/dsh-compaction';
 
 function* response(text, kind = 'stop', type = 'text') {
   yield {type: 'block-start', index: 0, blockType: type};
@@ -162,4 +163,135 @@ test('preset compactor coordination supports current Cordis and restores policie
     await integration.dispose();
     for (const runtime of ctx.registry.values()) for (const fiber of runtime.fibers) if (runtime.callback === Basic) assert.equal(fiber.ctx.compaction.config.auto, true);
   } finally {await ctx.fiber.dispose();}
+});
+
+test('a large admitted user message can use the remaining space before a balanced prefix exists', async t => {
+  const f = await fixture(t, {capacity: 8192, buffer: 4096, retain: 25});
+  await f.send('x'.repeat(23000));
+  assert.deepEqual(f.errors, []);
+  assert.equal(f.calls.length, 1);
+  assert.ok(f.calls[0].maxTokens > 0 && f.calls[0].maxTokens < 4096);
+  assert.equal(f.events().filter(e => e.type === 'compaction/start').length, 0);
+});
+
+function* readPair(step) {
+  for (let i = 0; i < 2; i++) {
+    const id = 'read-' + step + '-' + i;
+    yield {type: 'block-start', index: i, blockType: 'tool-call', id, name: 'read_pair'};
+    yield {type: 'block-end', index: i, block: {type: 'tool-call', id, name: 'read_pair', arguments: '{}'}};
+  }
+  yield {type: 'finish', reason: {kind: 'tool-calls'}};
+}
+
+function registerReadPair(ctx, execute) {
+  ctx.tools.register(defineTool({name: 'read_pair', description: 'Read project text', parameters: {},
+    output: {schema: {type: 'string'}, render: (_args, value) => [{type: 'text', text: value}]}, execute}));
+}
+
+test('an indivisible tool batch can cross the soft reserve and compact once more history ages out', async t => {
+  let step = 0, results = 0;
+  const f = await fixture(t, {capacity: 12000, buffer: 6000, retain: 30, setup({ctx}) {
+    registerReadPair(ctx, async () => 'r'.repeat(++results <= 2 ? 12600 : 8000));
+  }, generate(req) {
+    if (req.purpose) return response('The initial request and first pair of reads are complete.');
+    return ++step <= 2 ? readPair(step) : response('Done.');
+  }});
+  await f.send('u'.repeat(4600));
+  assert.deepEqual(f.errors, []);
+  assert.equal(results, 4);
+  assert.deepEqual(f.calls.map(req => req.purpose ?? 'main'), ['main','main','compaction','main']);
+  const afterFirst = f.calls[1], afterSecond = f.calls[3];
+  assert.ok(afterFirst.maxTokens > 0 && afterFirst.maxTokens < 6000);
+  for (const [request, batch] of [[afterFirst, 1], [afterSecond, 2]]) {
+    const calls = request.messages.flatMap(m => m.content.filter(b => b.type === 'tool-call'));
+    for (let i = 0; i < 2; i++) {
+      const id = 'read-' + batch + '-' + i;
+      assert.ok(calls.some(b => b.id === id));
+      assert.ok(request.messages.some(m => m.toolCallId === id));
+    }
+  }
+  assert.equal(f.events().filter(e => e.type === 'compaction/end' && !e.data.error).length, 1);
+});
+
+test('summary retries keep the available generation allowance and accept a complete second attempt', async t => {
+  let tries = 0;
+  const f = await fixture(t, {generate(req) {
+    if (!req.purpose) return response('a'.repeat(500000));
+    return ++tries === 1 ? response('Incomplete', 'max-tokens') : response('Complete checkpoint.');
+  }});
+  await f.send('Continue the project');
+  assert.deepEqual(f.errors, []);
+  const summaries = f.calls.filter(r => r.purpose);
+  assert.equal(summaries.length, 2);
+  assert.ok(summaries[1].maxTokens >= summaries[0].maxTokens - 100);
+  assert.equal(f.events().filter(e => e.type === 'compaction/end' && !e.data.error).length, 1);
+});
+
+test('provider failures during soft compaction propagate without retrying as a size error', async t => {
+  const f = await fixture(t, {generate(req) {
+    if (!req.purpose) return response('b'.repeat(500000));
+    return [{type: 'finish', reason: {kind: 'error', failure: {code: 'AUTHENTICATION', message: 'Invalid account'}}}];
+  }});
+  await f.send('Write');
+  assert.equal(f.calls.filter(r => r.purpose).length, 1);
+  assert.ok(f.errors.some(message => message.includes('Invalid account')));
+  assert.equal(f.events().filter(e => e.type === 'compaction/summary').length, 0);
+});
+
+test('a truly oversized pending input still fails before any provider request', async t => {
+  const f = await fixture(t, {capacity: 8192, buffer: 4096, retain: 25});
+  await f.send('x'.repeat(45000));
+  assert.equal(f.calls.length, 0);
+  assert.ok(f.errors.some(message => /No older balanced history|fills the context window/.test(message)));
+});
+
+test('soft pressure preserves a lone existing checkpoint until fresh older content is eligible', async t => {
+  const f = await fixture(t, {capacity: 10000, buffer: 4096, retain: 32});
+  const session = f.agent.session;
+  const append = (source, text) => session.append('user/message', createUserMessage({source, content: [{type: 'text', text}]}), {surfaceOp: 'append'});
+  append(compactCheckpointSource('previous-compaction'), 'checkpoint'.repeat(800));
+  append({kind: 'user'}, 'recent'.repeat(3000));
+  const before = [...session.surface.nodes];
+  const size = f.engine.projectedTokens(f.agent);
+  assert.ok(size > 10000 - 4096 && size < 9999);
+  assert.equal(await f.engine.compactIfNeeded(f.agent, 'pressure', new AbortController().signal), null);
+  assert.deepEqual(session.surface.nodes, before);
+  assert.equal(f.calls.length, 0);
+});
+
+test('three rejected summaries leave a fitting main request usable across both planning hooks', async t => {
+  let step = 0;
+  const f = await fixture(t, {capacity: 12000, buffer: 6000, retain: 30, setup({ctx}) {
+    registerReadPair(ctx, async () => 'r'.repeat(7500));
+  }, generate(req) {
+    if (req.purpose) return response('Incomplete', 'max-tokens');
+    return ++step === 1 ? readPair(step) : response('Finished with the original history.');
+  }});
+  const original = 'u'.repeat(13500);
+  await f.send(original);
+  assert.deepEqual(f.errors, []);
+  assert.equal(step, 2);
+  assert.equal(f.calls.filter(req => req.purpose).length, 3);
+  assert.ok(f.calls.at(-1).messages.some(m => m.content.some(b => b.text === original)));
+  assert.equal(f.events().filter(e => e.type === 'compaction/summary').length, 0);
+});
+
+test('on a reported overflow the plugin can release space with a reduced reserve and retry', async t => {
+  let step = 0;
+  const f = await fixture(t, {capacity: 12000, buffer: 6000, retain: 30, setup({ctx}) {
+    registerReadPair(ctx, async () => 'r'.repeat(12600));
+  }, generate(req) {
+    if (req.purpose) return response('The initial request has been preserved.');
+    step++;
+    if (step === 1) return readPair(step);
+    if (step === 2) return [{type: 'finish', reason: {kind: 'error', failure: {code: 'CONTEXT_WINDOW_EXCEEDED', message: 'Server window exceeded'}}}];
+    return response('Complete after recovery.');
+  }});
+  await f.send('u'.repeat(4600));
+  assert.deepEqual(f.errors, []);
+  assert.equal(step, 3);
+  assert.equal(f.calls.filter(req => req.purpose).length, 1);
+  assert.equal(f.events().filter(e => e.type === 'compaction/end' && !e.data.error).length, 1);
+  assert.ok(f.calls.at(-1).messages.some(m => m.toolCallId === 'read-1-0'));
+  assert.ok(f.calls.at(-1).messages.some(m => m.toolCallId === 'read-1-1'));
 });

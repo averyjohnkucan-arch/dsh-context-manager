@@ -1,6 +1,6 @@
 {
   "name": "dsh-context-manager",
-  "version": "0.2.2-rc4.1",
+  "version": "0.2.2-rc4.2",
   "type": "module",
   "description": "Buffer-triggered compaction with capacity-based verbatim retention and message-free continuation.",
   "license": "MIT",
